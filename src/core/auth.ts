@@ -4,6 +4,8 @@ import { errors } from '../lib/errors.js'
 import { validatePasswordStrength } from '../lib/password.js'
 import { createSession, SessionContext } from './sessions.js'
 import { createAccessToken } from './tokens.js'
+import { createEmailVerification } from './verification.js'
+import { sendVerificationEmail } from '../lib/email.js'
 import { 
   recordLoginAttempt, 
   isAccountLocked, 
@@ -32,6 +34,11 @@ export async function signup(email: string, password: string, context: SessionCo
   ])
 
   await logAuditEvent(user.id, 'user.signup', context.ipAddress || null, context.userAgent || null)
+
+  const verificationToken = await createEmailVerification(user.id)
+  
+  const baseUrl = process.env.BASE_URL || 'http://localhost:3000'
+  await sendVerificationEmail(user.email, verificationToken, baseUrl)
 
   const session = await createSession(user.id, context)
   const accessToken = createAccessToken(user.id, user.email)

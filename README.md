@@ -83,13 +83,31 @@ POST /signup
 {"email": "user@example.com", "password": "SecurePassword123!"}
 ```
 
+**Verify email:**
+```bash
+POST /verify-email
+{"token": "..."}
+```
+
 **Log in:**
 ```bash
 POST /login
 {"email": "user@example.com", "password": "SecurePassword123!"}
 ```
 
-Both return:
+**Request password reset:**
+```bash
+POST /password-reset/request
+{"email": "user@example.com"}
+```
+
+**Reset password:**
+```bash
+POST /password-reset/confirm
+{"token": "...", "password": "NewPassword123!"}
+```
+
+Both signup and login return:
 ```json
 {
   "user": {"id": "...", "email": "...", "verified": false},
@@ -174,17 +192,12 @@ See [PERFORMANCE.md](PERFORMANCE.md) for benchmarks.
 
 ## What's Missing?
 
-This is v0.1.0. Here's what's coming:
-
-**v0.2.0:**
-- Email verification
-- Password reset
-- TOTP/2FA
+This is v0.2.0. Here's what's coming:
 
 **v0.3.0:**
+- TOTP/2FA
 - OAuth (Google, GitHub)
 - WebAuthn/passkeys
-- GDPR compliance (account deletion)
 
 **v1.0.0:**
 - Battle-tested in production

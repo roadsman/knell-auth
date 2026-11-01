@@ -150,5 +150,13 @@ export const queries = {
 
   async markUserVerified(userId: string): Promise<void> {
     await sql`update users set verified = true where id = ${userId}`
+  },
+
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    await sql`
+      update users 
+      set password_hash = ${passwordHash}, updated_at = now() 
+      where id = ${userId}
+    `
   }
 }

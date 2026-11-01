@@ -1,12 +1,16 @@
 import { FastifyInstance } from 'fastify'
 import { signup, login, logout, refreshAccess } from '../core/auth.js'
 import { revokeAllUserSessions, getUserActiveSessions } from '../core/sessions.js'
+import { verifyEmail, createPasswordReset, resetPassword } from '../core/verification.js'
 import { queries } from '../data/queries.js'
 import { authenticate, getClientIp, getUserAgent } from './middleware.js'
 import { 
   signupSchema, 
   loginSchema, 
-  refreshSchema 
+  refreshSchema,
+  verifyTokenSchema,
+  passwordResetRequestSchema,
+  passwordResetSchema
 } from './validation.js'
 import { AuthError } from '../lib/errors.js'
 import { metrics, measureTime } from '../lib/metrics.js'
@@ -58,6 +62,42 @@ export async function registerRoutes(app: FastifyInstance) {
     })
 
     return reply.code(204).send()
+  })
+
+  app.post('/verify-email', async (request, reply) => {
+    const body = verifyTokenSchema.parse(request.body)
+    
+    const result = await verifyEmail(
+      body.token,
+      getClientIp(request),
+      getUserAgent(request)
+    )
+
+    return reply.send(result)
+  })
+
+  app.post('/password-reset/request', async (request, reply) => {
+    const body = passwordResetRequestSchema.parse(request.body)
+    
+    const result = await createPasswordReset(body.email)
+
+    return reply.send({ 
+      success: true,
+      message: 'If the email exists, a reset link has been sent'
+    })
+  })
+
+  app.post('/password-reset/confirm', async (request, reply) => {
+    const body = passwordResetSchema.parse(request.body)
+    
+    const result = await resetPassword(
+      body.token,
+      body.password,
+      getClientIp(request),
+      getUserAgent(request)
+    )
+
+    return reply.send(result)
   })
 
   app.post('/refresh', async (request, reply) => {

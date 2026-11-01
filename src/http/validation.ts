@@ -22,3 +22,12 @@ export const emailSchema = z.object({
 export const verifyTokenSchema = z.object({
   token: z.string().min(1, 'Token is required')
 })
+
+export const passwordResetRequestSchema = z.object({
+  email: z.string().email('Invalid email address')
+})
+
+export const passwordResetSchema = z.object({
+  token: z.string().min(1, 'Token is required'),
+  password: passwordSchema
+})

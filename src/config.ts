@@ -21,6 +21,10 @@ export const config = {
   verification: {
     tokenDuration: parseInt(process.env.VERIFICATION_TOKEN_DURATION || String(24 * 60 * 60 * 1000))
   },
+  email: {
+    from: process.env.EMAIL_FROM || 'noreply@knell.local',
+    enabled: process.env.EMAIL_ENABLED === 'true'
+  },
   security: {
     maxLoginAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5'),
     lockoutDuration: parseInt(process.env.LOCKOUT_DURATION || String(15 * 60 * 1000)),
