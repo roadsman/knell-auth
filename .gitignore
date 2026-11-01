@@ -1,0 +1,17 @@
+node_modules
+dist
+.env
+*.log
+.DS_Store
+*.tsbuildinfo
+coverage
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.history
+CODE_VERIFICATION.md
+GITHUB_SETUP.md
+LAUNCH_READY.md
+DEPLOY.md

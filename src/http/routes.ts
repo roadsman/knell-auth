@@ -1,0 +1,170 @@
+import { FastifyInstance } from 'fastify'
+import { signup, login, logout, refreshAccess } from '../core/auth.js'
+import { revokeAllUserSessions, getUserActiveSessions } from '../core/sessions.js'
+import { queries } from '../data/queries.js'
+import { authenticate, getClientIp, getUserAgent } from './middleware.js'
+import { 
+  signupSchema, 
+  loginSchema, 
+  refreshSchema 
+} from './validation.js'
+import { AuthError } from '../lib/errors.js'
+import { metrics, measureTime } from '../lib/metrics.js'
+import { cache } from '../lib/cache.js'
+
+export async function registerRoutes(app: FastifyInstance) {
+  const authLimiter = {
+    config: {
+      max: 5,
+      timeWindow: '15 minutes'
+    }
+  }
+
+  app.post('/signup', { config: authLimiter.config }, async (request, reply) => {
+    const body = signupSchema.parse(request.body)
+    
+    const result = await measureTime('signup', () => 
+      signup(body.email, body.password, {
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request)
+      })
+    )
+
+    metrics.increment('auth.signup')
+    return reply.code(201).send(result)
+  })
+
+  app.post('/login', { config: authLimiter.config }, async (request, reply) => {
+    const body = loginSchema.parse(request.body)
+    
+    const result = await measureTime('login', () =>
+      login(body.email, body.password, {
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request)
+      })
+    )
+
+    metrics.increment('auth.login')
+    return reply.send(result)
+  })
+
+  app.post('/logout', { preHandler: authenticate }, async (request, reply) => {
+    const authHeader = request.headers.authorization!
+    const token = authHeader.substring(7)
+    
+    await logout(token, request.userId!, {
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request)
+    })
+
+    return reply.code(204).send()
+  })
+
+  app.post('/refresh', async (request, reply) => {
+    const body = refreshSchema.parse(request.body)
+    
+    const accessToken = await refreshAccess(body.refreshToken)
+
+    return reply.send({ accessToken })
+  })
+
+  app.get('/me', { preHandler: authenticate }, async (request, reply) => {
+    const user = await queries.findUserById(request.userId!)
+
+    if (!user) {
+      return reply.code(404).send({ error: 'User not found' })
+    }
+
+    return reply.send({
+      id: user.id,
+      email: user.email,
+      verified: user.verified,
+      createdAt: user.created_at
+    })
+  })
+
+  app.get('/sessions', { preHandler: authenticate }, async (request, reply) => {
+    const sessions = await getUserActiveSessions(request.userId!)
+
+    return reply.send({
+      sessions: sessions.map(s => ({
+        id: s.id,
+        ipAddress: s.ip_address,
+        userAgent: s.user_agent,
+        createdAt: s.created_at,
+        lastActive: s.last_active,
+        current: request.headers.authorization?.substring(7) === s.token
+      }))
+    })
+  })
+
+  app.delete('/sessions/:sessionId', { preHandler: authenticate }, async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string }
+    
+    const session = await queries.findSessionById(sessionId)
+    if (!session) {
+      return reply.code(404).send({ error: 'Session not found' })
+    }
+
+    if (session.user_id !== request.userId) {
+      return reply.code(403).send({ error: 'Forbidden' })
+    }
+
+    await queries.deleteSession(session.token)
+    cache.delete(`session:${session.token}`)
+
+    return reply.code(204).send()
+  })
+
+  app.delete('/sessions', { preHandler: authenticate }, async (request, reply) => {
+    await revokeAllUserSessions(request.userId!)
+
+    return reply.code(204).send()
+  })
+
+  app.get('/health', async () => ({ status: 'ok', timestamp: Date.now() }))
+
+  app.get('/metrics', async (request, reply) => {
+    const authHeader = request.headers['x-metrics-key']
+    if (!process.env.METRICS_KEY || authHeader !== process.env.METRICS_KEY) {
+      return reply.code(401).send({ error: 'Unauthorized' })
+    }
+    return {
+      ...metrics.getAll(),
+      cache: cache.stats(),
+      timestamp: Date.now()
+    }
+  })
+
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof AuthError) {
+      metrics.increment(`auth.error.${error.code}`)
+      
+      if (error.code === 'RATE_LIMIT_EXCEEDED') {
+        return reply.code(429).send({
+          error: error.message,
+          code: error.code
+        })
+      }
+      
+      return reply.code(401).send({
+        error: error.message,
+        code: error.code
+      })
+    }
+
+    if (error.validation) {
+      return reply.code(400).send({
+        error: 'Validation failed',
+        details: error.validation
+      })
+    }
+
+    console.error('Unhandled error:', error)
+    metrics.increment('errors.unhandled')
+    
+    return reply.code(500).send({
+      error: 'Internal server error'
+    })
+  })
+}
