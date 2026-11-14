@@ -22,6 +22,10 @@ async function runMigrations() {
     await sql.unsafe(securitySQL)
     console.log('[security] migration complete')
 
+    const oauthSQL = readFileSync(join(__dirname, '../sql/oauth.sql'), 'utf-8')
+    await sql.unsafe(oauthSQL)
+    console.log('[oauth] migration complete')
+
     console.log('migrations completed')
   } catch (error) {
     console.error('Migration failed:', error)

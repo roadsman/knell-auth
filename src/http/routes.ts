@@ -2,6 +2,9 @@ import { FastifyInstance } from 'fastify'
 import { signup, login, logout, refreshAccess } from '../core/auth.js'
 import { revokeAllUserSessions, getUserActiveSessions } from '../core/sessions.js'
 import { verifyEmail, createPasswordReset, resetPassword } from '../core/verification.js'
+import { enableTOTP, verifyTOTP, confirmTOTP, disableTOTP } from '../core/totp.js'
+import { handleOAuthCallback, getGoogleOAuthUrl, getGitHubOAuthUrl, exchangeGoogleCode, exchangeGitHubCode } from '../core/oauth.js'
+import { generateRegistration, verifyRegistration, generateAuthentication, verifyAuthentication } from '../core/webauthn.js'
 import { queries } from '../data/queries.js'
 import { authenticate, getClientIp, getUserAgent } from './middleware.js'
 import { 
@@ -16,6 +19,7 @@ import { AuthError } from '../lib/errors.js'
 import { metrics, measureTime } from '../lib/metrics.js'
 import { cache } from '../lib/cache.js'
 import { sendPasswordResetEmail } from '../lib/email.js'
+import { generateSecureToken } from '../lib/crypto.js'
 
 export async function registerRoutes(app: FastifyInstance) {
   const authLimiter = {
@@ -166,6 +170,115 @@ export async function registerRoutes(app: FastifyInstance) {
     await revokeAllUserSessions(request.userId!)
 
     return reply.code(204).send()
+  })
+
+  app.post('/totp/enable', { preHandler: authenticate }, async (request, reply) => {
+    const user = await queries.findUserById(request.userId!)
+    if (!user) return reply.code(404).send({ error: 'User not found' })
+
+    const result = await enableTOTP(request.userId!, user.email)
+    return reply.send(result)
+  })
+
+  app.post('/totp/verify', { preHandler: authenticate }, async (request, reply) => {
+    const { code } = request.body as { code: string }
+    const result = await verifyTOTP(request.userId!, code)
+    return reply.send(result)
+  })
+
+  app.post('/totp/confirm', { preHandler: authenticate }, async (request, reply) => {
+    const { code } = request.body as { code: string }
+    const result = await confirmTOTP(request.userId!, code)
+    return reply.send(result)
+  })
+
+  app.delete('/totp', { preHandler: authenticate }, async (request, reply) => {
+    const { code } = request.body as { code: string }
+    const result = await disableTOTP(request.userId!, code)
+    return reply.send(result)
+  })
+
+  app.get('/auth/google', async (request, reply) => {
+    const state = generateSecureToken()
+    const url = getGoogleOAuthUrl(state)
+    return reply.send({ url, state })
+  })
+
+  app.get('/auth/github', async (request, reply) => {
+    const state = generateSecureToken()
+    const url = getGitHubOAuthUrl(state)
+    return reply.send({ url, state })
+  })
+
+  app.get('/auth/google/callback', async (request, reply) => {
+    const { code } = request.query as { code: string }
+    const userInfo = await exchangeGoogleCode(code)
+    const result = await handleOAuthCallback(userInfo, {
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request)
+    })
+    return reply.send(result)
+  })
+
+  app.get('/auth/github/callback', async (request, reply) => {
+    const { code } = request.query as { code: string }
+    const userInfo = await exchangeGitHubCode(code)
+    const result = await handleOAuthCallback(userInfo, {
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request)
+    })
+    return reply.send(result)
+  })
+
+  app.post('/webauthn/register/start', { preHandler: authenticate }, async (request, reply) => {
+    const user = await queries.findUserById(request.userId!)
+    if (!user) return reply.code(404).send({ error: 'User not found' })
+
+    const options = await generateRegistration(request.userId!, user.email)
+    return reply.send(options)
+  })
+
+  app.post('/webauthn/register/finish', { preHandler: authenticate }, async (request, reply) => {
+    const { response } = request.body as any
+    const result = await verifyRegistration(request.userId!, response)
+    return reply.send(result)
+  })
+
+  app.post('/webauthn/login/start', async (request, reply) => {
+    const { email } = request.body as { email: string }
+    const { options, userId } = await generateAuthentication(email)
+    return reply.send({ options, userId })
+  })
+
+  app.post('/webauthn/login/finish', async (request, reply) => {
+    const { userId, response } = request.body as any
+    const result = await verifyAuthentication(userId, response)
+    
+    if (result.verified) {
+      const user = await queries.findUserById(userId)
+      if (!user) return reply.code(404).send({ error: 'User not found' })
+
+      const { createSession } = await import('../core/sessions.js')
+      const { createAccessToken } = await import('../core/tokens.js')
+
+      const session = await createSession(userId, {
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request)
+      })
+      const accessToken = createAccessToken(userId, user.email)
+
+      return reply.send({
+        user: {
+          id: user.id,
+          email: user.email,
+          verified: user.verified
+        },
+        accessToken,
+        refreshToken: session.token
+      })
+    }
+
+    return reply.code(401).send({ error: 'Authentication failed' })
   })
 
   app.get('/health', async () => ({ status: 'ok', timestamp: Date.now() }))
