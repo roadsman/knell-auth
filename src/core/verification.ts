@@ -32,7 +32,7 @@ export async function createPasswordReset(email: string) {
   const user = await queries.findUserByEmail(email)
   
   if (!user) {
-    return { success: true }
+    return { success: true, sent: false }
   }
 
   const token = generateSecureToken()
@@ -42,7 +42,7 @@ export async function createPasswordReset(email: string) {
   
   await logAuditEvent(user.id, 'password_reset.requested', null, null)
 
-  return { token, email: user.email }
+  return { success: true, sent: true, token, email: user.email }
 }
 
 export async function resetPassword(token: string, newPassword: string, ipAddress?: string, userAgent?: string) {

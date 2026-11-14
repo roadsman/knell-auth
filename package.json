@@ -1,6 +1,6 @@
 {
   "name": "knell-auth",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "self-hosted auth system. handles accounts, sessions, and sign-in so your apps don't have to.",
   "type": "module",
   "scripts": {

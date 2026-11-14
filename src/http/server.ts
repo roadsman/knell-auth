@@ -4,6 +4,7 @@ import rateLimit from '@fastify/rate-limit'
 import helmet from '@fastify/helmet'
 import { config } from '../config.js'
 import { registerRoutes } from './routes.js'
+import { registerAdminRoutes } from './admin.js'
 
 export async function createServer() {
   const app = Fastify({
@@ -78,6 +79,7 @@ export async function createServer() {
   })
 
   await registerRoutes(app)
+  await registerAdminRoutes(app)
 
   return app
 }

@@ -15,6 +15,7 @@ import {
 import { AuthError } from '../lib/errors.js'
 import { metrics, measureTime } from '../lib/metrics.js'
 import { cache } from '../lib/cache.js'
+import { sendPasswordResetEmail } from '../lib/email.js'
 
 export async function registerRoutes(app: FastifyInstance) {
   const authLimiter = {
@@ -80,6 +81,11 @@ export async function registerRoutes(app: FastifyInstance) {
     const body = passwordResetRequestSchema.parse(request.body)
     
     const result = await createPasswordReset(body.email)
+
+    if (result.sent) {
+      const baseUrl = process.env.BASE_URL || 'http://localhost:3000'
+      await sendPasswordResetEmail(result.email!, result.token!, baseUrl)
+    }
 
     return reply.send({ 
       success: true,

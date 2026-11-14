@@ -29,7 +29,10 @@ Knell is auth without the bloat. It does one thing well: secure authentication f
 
 - **Secure by default**: Argon2id password hashing, timing-attack protection
 - **Session management**: JWT access tokens + secure refresh tokens
+- **Email verification**: Verify emails on signup
+- **Password reset**: Secure token-based password recovery
 - **Account protection**: Rate limiting, brute force protection, account lockout
+- **Admin dashboard**: User stats, audit logs, IP blocking
 - **Audit logging**: Track all authentication events
 - **IP blocking**: Automatic and manual IP blocklisting
 - **Device tracking**: Monitor active sessions across devices
@@ -134,6 +137,12 @@ GET /sessions
 Authorization: Bearer <accessToken>
 ```
 
+**Revoke specific session:**
+```bash
+DELETE /sessions/:sessionId
+Authorization: Bearer <accessToken>
+```
+
 **Revoke all sessions:**
 ```bash
 DELETE /sessions
@@ -144,6 +153,33 @@ Authorization: Bearer <accessToken>
 ```bash
 POST /logout
 Authorization: Bearer <accessToken>
+```
+
+### Admin Endpoints
+
+**Get stats:**
+```bash
+GET /admin/stats
+Authorization: Bearer <accessToken>
+```
+
+**List users:**
+```bash
+GET /admin/users?page=1&limit=50
+Authorization: Bearer <accessToken>
+```
+
+**View audit logs:**
+```bash
+GET /admin/audit-logs?userId=...
+Authorization: Bearer <accessToken>
+```
+
+**Block IP:**
+```bash
+POST /admin/block-ip
+Authorization: Bearer <accessToken>
+{"ipAddress": "1.2.3.4", "reason": "abuse", "duration": 86400000}
 ```
 
 ## Security
